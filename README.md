@@ -1,1 +1,1 @@
-# CDO
+# CDO smart contracts (CODEX)
