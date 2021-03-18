@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 pragma solidity 0.6.6;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
@@ -5,11 +6,12 @@ import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
+
+// CodexToken interface
 interface ICodexToken is IERC20 {
   function cap() external view returns (uint256);
   function unlockedSupply() external view returns (uint256);
   function totalLock() external view returns (uint256);
-  function manualMint(address _to, uint256 _amount) external;
   function mint(address _to, uint256 _amount) external;
   function burn(address _account, uint256 _amount) external;
   function totalBalanceOf(address _account) external view returns (uint256);
@@ -20,75 +22,93 @@ interface ICodexToken is IERC20 {
   function lock(address _account, uint256 _amount) external;
 }
 
-
 // CodexToken with Governance.
 contract CodexToken is ERC20("CodexToken", "CODEX"), Ownable, ICodexToken {
-  uint256 private _cap = 188000000e18;
   uint256 private _totalLock;
+  uint256 private constant MULTIPLIER = 1 ether;
+  uint256 private _cap = 188000000 * MULTIPLIER;
 
-  uint256 public startReleaseBlock;
   uint256 public endReleaseBlock;
-  uint256 public manualMintLimit = 8000000e18;
-  uint256 public manualMinted = 0;
+  uint256 public startReleaseBlock;
 
   mapping(address => uint256) private _locks;
   mapping(address => uint256) private _lastUnlockBlock;
 
   event Lock(address indexed to, uint256 value);
 
-  constructor(uint256 _startReleaseBlock, uint256 _endReleaseBlock) public {
+
+  //  –––––––––––––––––––––
+  //  CONSTRUCTOR
+  //  –––––––––––––––––––––
+
+
+  constructor(address warchestReceiver, address devReceiver, uint256 _startReleaseBlock, uint256 _endReleaseBlock) public {
     require(_endReleaseBlock > _startReleaseBlock, "endReleaseBlock < startReleaseBlock");
-    _setupDecimals(18);
+
     startReleaseBlock = _startReleaseBlock;
     endReleaseBlock = _endReleaseBlock;
 
-    // maunalMint 250k for seeding liquidity
-    manualMint(msg.sender, 250000e18);
+    _setupDecimals(18);
+    _mint(devReceiver, 2700000 * 1 ether); // 2.7 mln tokens
+    _mint(warchestReceiver, 900000 * 1 ether); // 0.9 mln tokens
   }
+
+
+  //  –––––––––––––––––––––
+  //  SETTERS
+  //  –––––––––––––––––––––
+
+
+  function unlock() public override {
+    require(_locks[msg.sender] > 0, "unlock: No locked CODEXs!");
+
+    uint256 amount = canUnlockAmount(msg.sender);
+
+    _transfer(address(this), msg.sender, amount);
+    _locks[msg.sender] = _locks[msg.sender].sub(amount);
+    _lastUnlockBlock[msg.sender] = block.number;
+    _totalLock = _totalLock.sub(amount);
+  }
+
+  function transferAll(address _to) public {
+    _locks[_to] = _locks[_to].add(_locks[msg.sender]);
+
+    if (_lastUnlockBlock[_to] < startReleaseBlock) {
+      _lastUnlockBlock[_to] = startReleaseBlock;
+    }
+
+    if (_lastUnlockBlock[_to] < _lastUnlockBlock[msg.sender]) {
+      _lastUnlockBlock[_to] = _lastUnlockBlock[msg.sender];
+    }
+
+    _locks[msg.sender] = 0;
+    _lastUnlockBlock[msg.sender] = 0;
+
+    _transfer(msg.sender, _to, balanceOf(msg.sender));
+  }
+
+
+  //  –––––––––––––––––––––
+  //  SETTERS (ONLY OWNER)
+  //  –––––––––––––––––––––
+
 
   function setReleaseBlock(uint256 _startReleaseBlock, uint256 _endReleaseBlock) public onlyOwner {
     require(_endReleaseBlock > _startReleaseBlock, "endReleaseBlock < startReleaseBlock");
+
     startReleaseBlock = _startReleaseBlock;
     endReleaseBlock = _endReleaseBlock;
   }
 
-  function cap() public override view returns (uint256) {
-    return _cap;
-  }
-
-  function unlockedSupply() public override view returns (uint256) {
-    return totalSupply().sub(totalLock());
-  }
-
-  function totalLock() public override view returns (uint256) {
-    return _totalLock;
-  }
-
-  function manualMint(address _to, uint256 _amount) public override onlyOwner {
-    require(manualMinted <= manualMintLimit, "mint limit exceeded");
-    mint(_to, _amount);
-  }
-
   function mint(address _to, uint256 _amount) public override onlyOwner {
-    require(totalSupply().add(_amount) <= cap(), "cap exceeded");
+    require(totalSupply().add(_amount) <= cap(), "mint: cap exceeded");
+
     _mint(_to, _amount);
     _moveDelegates(address(0), _delegates[_to], _amount);
   }
 
   function burn(address _account, uint256 _amount) public override onlyOwner {
     _burn(_account, _amount);
-  }
-
-  function totalBalanceOf(address _account) public override view returns (uint256) {
-    return _locks[_account].add(balanceOf(_account));
-  }
-
-  function lockOf(address _account) public override view returns (uint256) {
-    return _locks[_account];
-  }
-
-  function lastUnlockBlock(address _account) public override view returns (uint256) {
-    return _lastUnlockBlock[_account];
   }
 
   function lock(address _account, uint256 _amount) public override onlyOwner {
@@ -107,59 +127,64 @@ contract CodexToken is ERC20("CodexToken", "CODEX"), Ownable, ICodexToken {
     emit Lock(_account, _amount);
   }
 
+
+  //  –––––––––––––––––––––
+  //  GETTERS
+  //  –––––––––––––––––––––
+
+
+  function totalBalanceOf(address _account) public override view returns (uint256) {
+    return _locks[_account].add(balanceOf(_account));
+  }
+
+  function lockOf(address _account) public override view returns (uint256) {
+    return _locks[_account];
+  }
+
+  function lastUnlockBlock(address _account) public override view returns (uint256) {
+    return _lastUnlockBlock[_account];
+  }
+
   function canUnlockAmount(address _account) public override view returns (uint256) {
-    // When block number less than startReleaseBlock, no CODEXs can be unlocked
     if (block.number < startReleaseBlock) {
+      // When block number less than startReleaseBlock, no CODEXs can be unlocked
       return 0;
-    }
-    // When block number more than endReleaseBlock, all locked CODEXs can be unlocked
-    else if (block.number >= endReleaseBlock) {
+    } else if (block.number >= endReleaseBlock) {
+      // When block number more than endReleaseBlock, all locked CODEXs can be unlocked
       return _locks[_account];
-    }
-    // When block number is more than startReleaseBlock but less than endReleaseBlock,
-    // some CODEXs can be released
-    else
-    {
+    } else {
+      // When block number is more than startReleaseBlock but less than endReleaseBlock,
+      // some CODEXs can be released
       uint256 releasedBlock = block.number.sub(_lastUnlockBlock[_account]);
       uint256 blockLeft = endReleaseBlock.sub(_lastUnlockBlock[_account]);
       return _locks[_account].mul(releasedBlock).div(blockLeft);
     }
   }
 
-  function unlock() public override {
-    require(_locks[msg.sender] > 0, "no locked CODEXs");
-
-    uint256 amount = canUnlockAmount(msg.sender);
-
-    _transfer(address(this), msg.sender, amount);
-    _locks[msg.sender] = _locks[msg.sender].sub(amount);
-    _lastUnlockBlock[msg.sender] = block.number;
-    _totalLock = _totalLock.sub(amount);
+  function cap() public override view returns (uint256) {
+    return _cap;
   }
 
-  // @dev move CODEXs with its locked funds to another account
-  function transferAll(address _to) public {
-    _locks[_to] = _locks[_to].add(_locks[msg.sender]);
-
-    if (_lastUnlockBlock[_to] < startReleaseBlock) {
-      _lastUnlockBlock[_to] = startReleaseBlock;
-    }
-
-    if (_lastUnlockBlock[_to] < _lastUnlockBlock[msg.sender]) {
-      _lastUnlockBlock[_to] = _lastUnlockBlock[msg.sender];
-    }
-
-    _locks[msg.sender] = 0;
-    _lastUnlockBlock[msg.sender] = 0;
-
-    _transfer(msg.sender, _to, balanceOf(msg.sender));
+  function unlockedSupply() public override view returns (uint256) {
+    return totalSupply().sub(totalLock());
   }
 
-  // Copied and modified from YAM code:
-  // https://github.com/yam-finance/yam-protocol/blob/master/contracts/token/YAMGovernanceStorage.sol
-  // https://github.com/yam-finance/yam-protocol/blob/master/contracts/token/YAMGovernance.sol
-  // Which is copied and modified from COMPOUND:
-  // https://github.com/compound-finance/compound-protocol/blob/master/contracts/Governance/Comp.sol
+  function totalLock() public override view returns (uint256) {
+    return _totalLock;
+  }
+
+
+  //  –––––––––––––––––––––
+  //  GOVERNANCE
+  //
+  //  Copied and modified from YAM code:
+  //  https://github.com/yam-finance/yam-protocol/blob/master/contracts/token/YAMGovernanceStorage.sol
+  //  https://github.com/yam-finance/yam-protocol/blob/master/contracts/token/YAMGovernance.sol
+  //  Which is copied and modified from COMPOUND:
+  //  https://github.com/compound-finance/compound-protocol/blob/master/contracts/Governance/Comp.sol
+  //
+  // –––––––––––––––––––––
+
 
   /// @notice A record of each accounts delegate
   mapping(address => address) internal _delegates;

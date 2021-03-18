@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 pragma solidity 0.6.6;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
@@ -73,7 +74,7 @@ contract FairLaunch is IFairLaunch, Ownable {
   address public devaddr;
   // CODEX tokens created per block.
   uint256 public codexPerBlock;
-  // Bonus muliplier for early codex makers.
+  // Bonus multiplier for early codex makers.
   uint256 public bonusMultiplier;
   // Block number when bonus CODEX period ends.
   uint256 public bonusEndBlock;
@@ -93,6 +94,12 @@ contract FairLaunch is IFairLaunch, Ownable {
   event Withdraw(address indexed user, uint256 indexed pid, uint256 amount);
   event EmergencyWithdraw(address indexed user, uint256 indexed pid, uint256 amount);
 
+
+  //  –––––––––––––––––––––
+  //  CONSTRUCTOR
+  //  –––––––––––––––––––––
+
+
   constructor(
     ICodexToken _codex,
     address _devaddr,
@@ -111,22 +118,20 @@ contract FairLaunch is IFairLaunch, Ownable {
     startBlock = _startBlock;
   }
 
-  /*
-  ██████╗░░█████╗░██████╗░░█████╗░███╗░░░███╗  ░██████╗███████╗████████╗████████╗███████╗██████╗░
-  ██╔══██╗██╔══██╗██╔══██╗██╔══██╗████╗░████║  ██╔════╝██╔════╝╚══██╔══╝╚══██╔══╝██╔════╝██╔══██╗
-  ██████╔╝███████║██████╔╝███████║██╔████╔██║  ╚█████╗░█████╗░░░░░██║░░░░░░██║░░░█████╗░░██████╔╝
-  ██╔═══╝░██╔══██║██╔══██╗██╔══██║██║╚██╔╝██║  ░╚═══██╗██╔══╝░░░░░██║░░░░░░██║░░░██╔══╝░░██╔══██╗
-  ██║░░░░░██║░░██║██║░░██║██║░░██║██║░╚═╝░██║  ██████╔╝███████╗░░░██║░░░░░░██║░░░███████╗██║░░██║
-  ╚═╝░░░░░╚═╝░░╚═╝╚═╝░░╚═╝╚═╝░░╚═╝╚═╝░░░░░╚═╝  ╚═════╝░╚══════╝░░░╚═╝░░░░░░╚═╝░░░╚══════╝╚═╝░░╚═╝
-  */
+
+  //  –––––––––––––––––––––
+  //  SETTERS (ONLY OWNER)
+  //  –––––––––––––––––––––
+
 
   // Update dev address by the previous dev.
   function setDev(address _devaddr) public {
-    require(msg.sender == devaddr, "dev: wut?");
+    require(msg.sender == devaddr, "setDev: Not allowed!");
+
     devaddr = _devaddr;
   }
 
-  function setcodexPerBlock(uint256 _codexPerBlock) public onlyOwner {
+  function setCodexPerBlock(uint256 _codexPerBlock) public onlyOwner {
     codexPerBlock = _codexPerBlock;
   }
 
@@ -139,6 +144,7 @@ contract FairLaunch is IFairLaunch, Ownable {
   ) public onlyOwner {
     require(_bonusEndBlock > block.number, "setBonus: bad bonusEndBlock");
     require(_bonusMultiplier > 1, "setBonus: bad bonusMultiplier");
+
     bonusMultiplier = _bonusMultiplier;
     bonusEndBlock = _bonusEndBlock;
     bonusLockUpBps = _bonusLockUpBps;
@@ -153,8 +159,10 @@ contract FairLaunch is IFairLaunch, Ownable {
     if (_withUpdate) {
       massUpdatePools();
     }
-    require(_stakeToken != address(0), "add: not stakeToken addr");
-    require(!isDuplicatedPool(_stakeToken), "add: stakeToken dup");
+
+    require(_stakeToken != address(0), "addPool: not stakeToken addr");
+    require(!isDuplicatedPool(_stakeToken), "addPool: stakeToken dup");
+
     uint256 lastRewardBlock = block.number > startBlock ? block.number : startBlock;
     totalAllocPoint = totalAllocPoint.add(_allocPoint);
     poolInfo.push(
@@ -177,64 +185,21 @@ contract FairLaunch is IFairLaunch, Ownable {
     if (_withUpdate) {
       massUpdatePools();
     }
+
     totalAllocPoint = totalAllocPoint.sub(poolInfo[_pid].allocPoint).add(_allocPoint);
     poolInfo[_pid].allocPoint = _allocPoint;
   }
 
-  /*
-  ░██╗░░░░░░░██╗░█████╗░██████╗░██╗░░██╗
-  ░██║░░██╗░░██║██╔══██╗██╔══██╗██║░██╔╝
-  ░╚██╗████╗██╔╝██║░░██║██████╔╝█████═╝░
-  ░░████╔═████║░██║░░██║██╔══██╗██╔═██╗░
-  ░░╚██╔╝░╚██╔╝░╚█████╔╝██║░░██║██║░╚██╗
-  ░░░╚═╝░░░╚═╝░░░╚════╝░╚═╝░░╚═╝╚═╝░░╚═╝
-  */
 
-  function isDuplicatedPool(address _stakeToken) public view returns (bool) {
-    uint256 length = poolInfo.length;
-    for (uint256 _pid = 0; _pid < length; _pid++) {
-      if(poolInfo[_pid].stakeToken == _stakeToken) return true;
-    }
-    return false;
-  }
+  //  –––––––––––––––––––––
+  //  SETTERS
+  //  –––––––––––––––––––––
 
-  function poolLength() external override view returns (uint256) {
-    return poolInfo.length;
-  }
 
-  function manualMint(address _to, uint256 _amount) public onlyOwner {
-    codex.manualMint(_to, _amount);
-  }
-
-  // Return reward multiplier over the given _from to _to block.
-  function getMultiplier(uint256 _lastRewardBlock, uint256 _currentBlock) public view returns (uint256) {
-    if (_currentBlock <= bonusEndBlock) {
-      return _currentBlock.sub(_lastRewardBlock).mul(bonusMultiplier);
-    }
-    if (_lastRewardBlock >= bonusEndBlock) {
-      return _currentBlock.sub(_lastRewardBlock);
-    }
-    // This is the case where bonusEndBlock is in the middle of _lastRewardBlock and _currentBlock block.
-    return bonusEndBlock.sub(_lastRewardBlock).mul(bonusMultiplier).add(_currentBlock.sub(bonusEndBlock));
-  }
-
-  // View function to see pending CODEXs on frontend.
-  function pendingCodex(uint256 _pid, address _user) external override view returns (uint256) {
-    PoolInfo storage pool = poolInfo[_pid];
-    UserInfo storage user = userInfo[_pid][_user];
-    uint256 accCodexPerShare = pool.accCodexPerShare;
-    uint256 lpSupply = IERC20(pool.stakeToken).balanceOf(address(this));
-    if (block.number > pool.lastRewardBlock && lpSupply != 0) {
-      uint256 multiplier = getMultiplier(pool.lastRewardBlock, block.number);
-      uint256 codexReward = multiplier.mul(codexPerBlock).mul(pool.allocPoint).div(totalAllocPoint);
-      accCodexPerShare = accCodexPerShare.add(codexReward.mul(1e12).div(lpSupply));
-    }
-    return user.amount.mul(accCodexPerShare).div(1e12).sub(user.rewardDebt);
-  }
-
-  // Update reward vairables for all pools. Be careful of gas spending!
+  // Update reward variiables for all pools. Be careful of gas spending!
   function massUpdatePools() public {
     uint256 length = poolInfo.length;
+
     for (uint256 pid = 0; pid < length; ++pid) {
       updatePool(pid);
     }
@@ -243,29 +208,37 @@ contract FairLaunch is IFairLaunch, Ownable {
   // Update reward variables of the given pool to be up-to-date.
   function updatePool(uint256 _pid) public override {
     PoolInfo storage pool = poolInfo[_pid];
+
     if (block.number <= pool.lastRewardBlock) {
       return;
     }
+
     uint256 lpSupply = IERC20(pool.stakeToken).balanceOf(address(this));
+
     if (lpSupply == 0) {
       pool.lastRewardBlock = block.number;
       return;
     }
+
     uint256 multiplier = getMultiplier(pool.lastRewardBlock, block.number);
     uint256 codexReward = multiplier.mul(codexPerBlock).mul(pool.allocPoint).div(totalAllocPoint);
+
     codex.mint(devaddr, codexReward.div(10));
     codex.mint(address(this), codexReward);
     pool.accCodexPerShare = pool.accCodexPerShare.add(codexReward.mul(1e12).div(lpSupply));
+
     // update accCodexPerShareTilBonusEnd
     if (block.number <= bonusEndBlock) {
       codex.lock(devaddr, codexReward.div(10).mul(bonusLockUpBps).div(10000));
       pool.accCodexPerShareTilBonusEnd = pool.accCodexPerShare;
     }
-    if(block.number > bonusEndBlock && pool.lastRewardBlock < bonusEndBlock) {
+
+    if (block.number > bonusEndBlock && pool.lastRewardBlock < bonusEndBlock) {
       uint256 codexBonusPortion = bonusEndBlock.sub(pool.lastRewardBlock).mul(bonusMultiplier).mul(codexPerBlock).mul(pool.allocPoint).div(totalAllocPoint);
       codex.lock(devaddr, codexBonusPortion.div(10).mul(bonusLockUpBps).div(10000));
       pool.accCodexPerShareTilBonusEnd = pool.accCodexPerShareTilBonusEnd.add(codexBonusPortion.mul(1e12).div(lpSupply));
     }
+
     pool.lastRewardBlock = block.number;
   }
 
@@ -273,15 +246,28 @@ contract FairLaunch is IFairLaunch, Ownable {
   function deposit(address _for, uint256 _pid, uint256 _amount) public override {
     PoolInfo storage pool = poolInfo[_pid];
     UserInfo storage user = userInfo[_pid][_for];
-    if (user.fundedBy != address(0)) require(user.fundedBy == msg.sender, "bad sof");
+
+    if (user.fundedBy != address(0)) {
+      require(user.fundedBy == msg.sender, "deposit: bad sof");
+    }
+
     require(pool.stakeToken != address(0), "deposit: not accept deposit");
+
     updatePool(_pid);
-    if (user.amount > 0) _harvest(_for, _pid);
-    if (user.fundedBy == address(0)) user.fundedBy = msg.sender;
+
+    if (user.amount > 0) {
+      _harvest(_for, _pid);
+    }
+
+    if (user.fundedBy == address(0)) {
+      user.fundedBy = msg.sender;
+    }
+
     IERC20(pool.stakeToken).safeTransferFrom(address(msg.sender), address(this), _amount);
     user.amount = user.amount.add(_amount);
     user.rewardDebt = user.amount.mul(pool.accCodexPerShare).div(1e12);
     user.bonusDebt = user.amount.mul(pool.accCodexPerShareTilBonusEnd).div(1e12);
+
     emit Deposit(msg.sender, _pid, _amount);
   }
 
@@ -294,56 +280,123 @@ contract FairLaunch is IFairLaunch, Ownable {
     _withdraw(_for, _pid, userInfo[_pid][_for].amount);
   }
 
-  function _withdraw(address _for, uint256 _pid, uint256 _amount) internal {
-    PoolInfo storage pool = poolInfo[_pid];
-    UserInfo storage user = userInfo[_pid][_for];
-    require(user.fundedBy == msg.sender, "only funder");
-    require(user.amount >= _amount, "withdraw: not good");
-    updatePool(_pid);
-    _harvest(_for, _pid);
-    user.amount = user.amount.sub(_amount);
-    user.rewardDebt = user.amount.mul(pool.accCodexPerShare).div(1e12);
-    user.bonusDebt = user.amount.mul(pool.accCodexPerShareTilBonusEnd).div(1e12);
-    if (pool.stakeToken != address(0)) {
-      IERC20(pool.stakeToken).safeTransfer(address(msg.sender), _amount);
-    }
-    emit Withdraw(msg.sender, _pid, user.amount);
-  }
-
   // Harvest CODEXs earn from the pool.
   function harvest(uint256 _pid) public override {
     PoolInfo storage pool = poolInfo[_pid];
     UserInfo storage user = userInfo[_pid][msg.sender];
+
     updatePool(_pid);
     _harvest(msg.sender, _pid);
+
     user.rewardDebt = user.amount.mul(pool.accCodexPerShare).div(1e12);
     user.bonusDebt = user.amount.mul(pool.accCodexPerShareTilBonusEnd).div(1e12);
-  }
-
-  function _harvest(address _to, uint256 _pid) internal {
-    PoolInfo storage pool = poolInfo[_pid];
-    UserInfo storage user = userInfo[_pid][_to];
-    require(user.amount > 0, "_harvest: nothing to harvest");
-    uint256 pending = user.amount.mul(pool.accCodexPerShare).div(1e12).sub(user.rewardDebt);
-    require(pending <= codex.balanceOf(address(this)), "_harvest: not enough codex");
-    uint256 bonus = user.amount.mul(pool.accCodexPerShareTilBonusEnd).div(1e12).sub(user.bonusDebt);
-    safeCodexTransfer(_to, pending);
-    codex.lock(_to, bonus.mul(bonusLockUpBps).div(10000));
   }
 
   // Withdraw without caring about rewards. EMERGENCY ONLY.
   function emergencyWithdraw(uint256 _pid) public {
     PoolInfo storage pool = poolInfo[_pid];
     UserInfo storage user = userInfo[_pid][msg.sender];
+
     IERC20(pool.stakeToken).safeTransfer(address(msg.sender), user.amount);
     emit EmergencyWithdraw(msg.sender, _pid, user.amount);
+
     user.amount = 0;
     user.rewardDebt = 0;
   }
 
+
+  //  –––––––––––––––––––––
+  //  GETTERS
+  //  –––––––––––––––––––––
+
+
+  function poolLength() external override view returns (uint256) {
+    return poolInfo.length;
+  }
+
+  function isDuplicatedPool(address _stakeToken) public view returns (bool) {
+    uint256 length = poolInfo.length;
+
+    for (uint256 _pid = 0; _pid < length; _pid++) {
+      if (poolInfo[_pid].stakeToken == _stakeToken) return true;
+    }
+
+    return false;
+  }
+
+  // Return reward multiplier over the given _from to _to block.
+  function getMultiplier(uint256 _lastRewardBlock, uint256 _currentBlock) public view returns (uint256) {
+    if (_currentBlock <= bonusEndBlock) {
+      return _currentBlock.sub(_lastRewardBlock).mul(bonusMultiplier);
+    }
+
+    if (_lastRewardBlock >= bonusEndBlock) {
+      return _currentBlock.sub(_lastRewardBlock);
+    }
+
+    // This is the case where bonusEndBlock is in the middle of _lastRewardBlock and _currentBlock block.
+    return bonusEndBlock.sub(_lastRewardBlock).mul(bonusMultiplier).add(_currentBlock.sub(bonusEndBlock));
+  }
+
+  // View function to see pending CODEXs on frontend.
+  function pendingCodex(uint256 _pid, address _user) external override view returns (uint256) {
+    PoolInfo storage pool = poolInfo[_pid];
+    UserInfo storage user = userInfo[_pid][_user];
+    uint256 accCodexPerShare = pool.accCodexPerShare;
+    uint256 lpSupply = IERC20(pool.stakeToken).balanceOf(address(this));
+
+    if (block.number > pool.lastRewardBlock && lpSupply != 0) {
+      uint256 multiplier = getMultiplier(pool.lastRewardBlock, block.number);
+      uint256 codexReward = multiplier.mul(codexPerBlock).mul(pool.allocPoint).div(totalAllocPoint);
+      accCodexPerShare = accCodexPerShare.add(codexReward.mul(1e12).div(lpSupply));
+    }
+
+    return user.amount.mul(accCodexPerShare).div(1e12).sub(user.rewardDebt);
+  }
+
+
+  //  –––––––––––––––––––––
+  //  INTERNAL
+  //  –––––––––––––––––––––
+
+
+  function _harvest(address _to, uint256 _pid) internal {
+    PoolInfo storage pool = poolInfo[_pid];
+    UserInfo storage user = userInfo[_pid][_to];
+    require(user.amount > 0, "_harvest: nothing to harvest");
+
+    uint256 pending = user.amount.mul(pool.accCodexPerShare).div(1e12).sub(user.rewardDebt);
+    require(pending <= codex.balanceOf(address(this)), "_harvest: not enough codex");
+
+    uint256 bonus = user.amount.mul(pool.accCodexPerShareTilBonusEnd).div(1e12).sub(user.bonusDebt);
+    _safeCodexTransfer(_to, pending);
+    codex.lock(_to, bonus.mul(bonusLockUpBps).div(10000));
+  }
+
+  function _withdraw(address _for, uint256 _pid, uint256 _amount) internal {
+    PoolInfo storage pool = poolInfo[_pid];
+    UserInfo storage user = userInfo[_pid][_for];
+
+    require(user.fundedBy == msg.sender, "_withdraw: only founder");
+    require(user.amount >= _amount, "_withdraw: not good");
+
+    updatePool(_pid);
+    _harvest(_for, _pid);
+    user.amount = user.amount.sub(_amount);
+    user.rewardDebt = user.amount.mul(pool.accCodexPerShare).div(1e12);
+    user.bonusDebt = user.amount.mul(pool.accCodexPerShareTilBonusEnd).div(1e12);
+
+    if (pool.stakeToken != address(0)) {
+      IERC20(pool.stakeToken).safeTransfer(address(msg.sender), _amount);
+    }
+
+    emit Withdraw(msg.sender, _pid, user.amount);
+  }
+
   // Safe codex transfer function, just in case if rounding error causes pool to not have enough CODEXs.
-  function safeCodexTransfer(address _to, uint256 _amount) internal {
+  function _safeCodexTransfer(address _to, uint256 _amount) internal {
     uint256 codexBal = codex.balanceOf(address(this));
+
     if (_amount > codexBal) {
       codex.transfer(_to, codexBal);
     } else {
