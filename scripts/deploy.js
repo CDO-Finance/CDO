@@ -6,7 +6,7 @@ async function main() {
   const TokenTimelock = await ethers.getContractFactory("TokenTimelock")
 
   const DEVELOPER_ADDRESS = '';
-  const MINTED_TOKENS_RECEIVER = '';
+  const WARCHEST_RECEIVER = '';
   const STAKING_TOKEN_ADDR = '';
 
   const CODEX_REWARD_PER_BLOCK = ethers.utils.parseEther('20');
@@ -20,8 +20,13 @@ async function main() {
 
   console.log("Starting the deployment ...");
 
-  const codexToken = await CodexToken.deploy(MINTED_TOKENS_RECEIVER, CODEX_START_RELEASE, CODEX_END_RELEASE)
+  const timelock = await TokenTimelock(codexToken.address, DEVELOPER_ADDRESS, 7776000)
+  await timelock.deployed()
+  console.log("Timelock deployed!");
+
+  const codexToken = await CodexToken.deploy(WARCHEST_RECEIVER, timelock.address, CODEX_START_RELEASE, CODEX_END_RELEASE)
   await codexToken.deployed()
+  console.log("Codex Token deployed!");
 
   const fairLaunch = await FairLaunch(
     codexToken.address,
@@ -32,13 +37,8 @@ async function main() {
     BONUS_END_BLOCK
   )
   await fairLaunch.deployed()
-
-  const timelock = await TokenTimelock(
-    codexToken.address,
-    DEVELOPER_ADDRESS,
-    7776000 // 3 months
-  )
-  await timelock.deployed()
+  console.log("Fair launch deployed!");
+  console.log("–––––––––––––––––––––––––––––");
 
 
   console.log("1) Transferring ownership of CodexToken from deployer to FairLaunch");

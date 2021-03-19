@@ -20,13 +20,14 @@ interface ICodexToken is IERC20 {
   function canUnlockAmount(address _account) external view returns (uint256);
   function unlock() external;
   function lock(address _account, uint256 _amount) external;
+  function transferRights(address newOwner) external;
 }
 
 // CodexToken with Governance.
 contract CodexToken is ERC20("CodexToken", "CODEX"), Ownable, ICodexToken {
   uint256 private _totalLock;
   uint256 private constant MULTIPLIER = 1 ether;
-  uint256 private _cap = 188000000 * MULTIPLIER;
+  uint256 private _cap = 18000000 * MULTIPLIER;
 
   uint256 public endReleaseBlock;
   uint256 public startReleaseBlock;
@@ -42,15 +43,15 @@ contract CodexToken is ERC20("CodexToken", "CODEX"), Ownable, ICodexToken {
   //  –––––––––––––––––––––
 
 
-  constructor(address warchestReceiver, address devReceiver, uint256 _startReleaseBlock, uint256 _endReleaseBlock) public {
+  constructor(address warchestReceiver, address devTimelockReceiver, uint256 _startReleaseBlock, uint256 _endReleaseBlock) public {
     require(_endReleaseBlock > _startReleaseBlock, "endReleaseBlock < startReleaseBlock");
 
     startReleaseBlock = _startReleaseBlock;
     endReleaseBlock = _endReleaseBlock;
 
     _setupDecimals(18);
-    _mint(devReceiver, 2700000 * 1 ether); // 2.7 mln tokens
-    _mint(warchestReceiver, 900000 * 1 ether); // 0.9 mln tokens
+    _mint(warchestReceiver, 900000 * MULTIPLIER); // 0.9 mln tokens
+    _mint(devTimelockReceiver, 2700000 * MULTIPLIER); // 2.7 mln tokens
   }
 
 
@@ -125,6 +126,10 @@ contract CodexToken is ERC20("CodexToken", "CODEX"), Ownable, ICodexToken {
     }
 
     emit Lock(_account, _amount);
+  }
+
+  function transferRights(address newOwner) public override onlyOwner {
+    transferOwnership(newOwner);
   }
 
 

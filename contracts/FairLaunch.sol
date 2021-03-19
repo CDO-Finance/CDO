@@ -33,6 +33,8 @@ interface IFairLaunch {
   function withdrawAll(address _for, uint256 _pid) external;
 
   function harvest(uint256 _pid) external;
+
+  function transferRights(address newOwner) external;
 }
 
 // FairLaunch is a smart contract for distributing CODEX by asking user to stake the ERC20-based token.
@@ -71,7 +73,7 @@ contract FairLaunch is IFairLaunch, Ownable {
   // The Codex TOKEN!
   ICodexToken public codex;
   // Dev address.
-  address public devaddr;
+  address public devAddr;
   // CODEX tokens created per block.
   uint256 public codexPerBlock;
   // Bonus multiplier for early codex makers.
@@ -102,7 +104,7 @@ contract FairLaunch is IFairLaunch, Ownable {
 
   constructor(
     ICodexToken _codex,
-    address _devaddr,
+    address _devAddr,
     uint256 _codexPerBlock,
     uint256 _startBlock,
     uint256 _bonusLockupBps,
@@ -111,7 +113,7 @@ contract FairLaunch is IFairLaunch, Ownable {
     bonusMultiplier = 0;
     totalAllocPoint = 0;
     codex = _codex;
-    devaddr = _devaddr;
+    devAddr = _devAddr;
     codexPerBlock = _codexPerBlock;
     bonusLockUpBps = _bonusLockupBps;
     bonusEndBlock = _bonusEndBlock;
@@ -125,10 +127,10 @@ contract FairLaunch is IFairLaunch, Ownable {
 
 
   // Update dev address by the previous dev.
-  function setDev(address _devaddr) public {
-    require(msg.sender == devaddr, "setDev: Not allowed!");
+  function setDev(address _devAddr) public {
+    require(msg.sender == devAddr, "setDev: Not allowed!");
 
-    devaddr = _devaddr;
+    devAddr = _devAddr;
   }
 
   function setCodexPerBlock(uint256 _codexPerBlock) public onlyOwner {
@@ -190,6 +192,11 @@ contract FairLaunch is IFairLaunch, Ownable {
     poolInfo[_pid].allocPoint = _allocPoint;
   }
 
+  // Call with logic update
+  function transferRights(address newOwner) public override onlyOwner {
+    codex.transferRights(newOwner);
+  }
+
 
   //  –––––––––––––––––––––
   //  SETTERS
@@ -223,19 +230,19 @@ contract FairLaunch is IFairLaunch, Ownable {
     uint256 multiplier = getMultiplier(pool.lastRewardBlock, block.number);
     uint256 codexReward = multiplier.mul(codexPerBlock).mul(pool.allocPoint).div(totalAllocPoint);
 
-    codex.mint(devaddr, codexReward.div(10));
+    codex.mint(devAddr, codexReward.div(10));
     codex.mint(address(this), codexReward);
     pool.accCodexPerShare = pool.accCodexPerShare.add(codexReward.mul(1e12).div(lpSupply));
 
     // update accCodexPerShareTilBonusEnd
     if (block.number <= bonusEndBlock) {
-      codex.lock(devaddr, codexReward.div(10).mul(bonusLockUpBps).div(10000));
+      codex.lock(devAddr, codexReward.div(10).mul(bonusLockUpBps).div(10000));
       pool.accCodexPerShareTilBonusEnd = pool.accCodexPerShare;
     }
 
     if (block.number > bonusEndBlock && pool.lastRewardBlock < bonusEndBlock) {
       uint256 codexBonusPortion = bonusEndBlock.sub(pool.lastRewardBlock).mul(bonusMultiplier).mul(codexPerBlock).mul(pool.allocPoint).div(totalAllocPoint);
-      codex.lock(devaddr, codexBonusPortion.div(10).mul(bonusLockUpBps).div(10000));
+      codex.lock(devAddr, codexBonusPortion.div(10).mul(bonusLockUpBps).div(10000));
       pool.accCodexPerShareTilBonusEnd = pool.accCodexPerShareTilBonusEnd.add(codexBonusPortion.mul(1e12).div(lpSupply));
     }
 
